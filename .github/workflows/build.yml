@@ -1,0 +1,53 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:    # Manuell starten
+  push:
+    tags:
+      - 'v*'           # Oder bei Tags wie v1.0.0
+
+jobs:
+  build:
+    runs-on: macos-latest   # ⚠️ macOS-Runner kosten Geld (~$0.08/Minute)
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Xcode Version prüfen
+        run: xcodebuild -version
+
+      - name: Projekt generieren (XcodeGen)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: App bauen
+        run: |
+          xcodebuild clean build \
+            -project BadiniTranslate.xcodeproj \
+            -scheme BadiniTranslate \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath build
+
+      - name: IPA erstellen (unsigned)
+        run: |
+          mkdir -p output
+          xcrun -sdk iphoneos PackageApplication \
+            -v build/Build/Products/Release-iphoneos/BadiniTranslate.app \
+            -o $PWD/output/BadiniTranslate.ipa 2>/dev/null || true
+          # Fallback: manuell packen
+          cd build/Build/Products/Release-iphoneos
+          mkdir -p Payload
+          cp -r BadiniTranslate.app Payload/
+          zip -r $PWD/../../../output/BadiniTranslate.ipa Payload/
+
+      - name: IPA hochladen (unsigniert)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BadiniTranslate-unsigned.ipa
+          path: output/BadiniTranslate.ipa
